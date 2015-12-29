@@ -11,6 +11,7 @@
 #include <kern/monitor.h>
 
 #define CMDBUF_SIZE	80	// enough for one VGA text line
+#define STACKFRAME_DEPTH 20
 
 
 struct Command {
@@ -26,7 +27,7 @@ static struct Command commands[] = {
 };
 #define NCOMMANDS (sizeof(commands)/sizeof(commands[0]))
 
-unsigned read_eip();
+unsigned read_eip() __attribute__((noinline));
 
 /***** Implementations of basic kernel monitor commands *****/
 
@@ -59,6 +60,19 @@ int
 mon_backtrace(int argc, char **argv, struct Trapframe *tf)
 {
 	// Your code here.
+	uint32_t ebp = read_ebp(), eip = read_eip();
+
+    int i, j;
+    for (i = 0; ebp != 0 && i < STACKFRAME_DEPTH; i ++) {
+        cprintf("ebp %08x eip %08x args ", ebp, eip);
+        uint32_t *args = (uint32_t *)ebp + 2;
+        for (j = 0; j < 4; j ++) {
+            cprintf("%08x ", args[j]);
+        }
+        cprintf("\n");
+        eip = ((uint32_t *)ebp)[1];
+        ebp = ((uint32_t *)ebp)[0];
+    }
 	return 0;
 }
 
