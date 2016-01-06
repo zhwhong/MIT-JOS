@@ -75,7 +75,8 @@ mon_backtrace(int argc, char **argv, struct Trapframe *tf)
     			fname[j] = debug_info.eip_fn_name[j];
     		}
     		fname[j] = '\0';
-    		cprintf("%s:args_num:%d\n",fname,debug_info.eip_fn_narg);
+    		//cprintf("%s:args_num:%d\n",fname,debug_info.eip_fn_narg);
+    		cprintf("%s+%x\n",fname,debug_info.eip_fn_addr);
     	}
     	else{
     		cprintf("debuginfo_eip fail\n");

@@ -183,7 +183,7 @@ i386_vm_init(void)
 	//////////////////////////////////////////////////////////////////////
 	// Make 'envs' point to an array of size 'NENV' of 'struct Env'.
 	// LAB 3: Your code here.
-
+	envs = (struct Env *)boot_alloc(NENV * sizeof(struct Env), PGSIZE);
 	//////////////////////////////////////////////////////////////////////
 	// Now that we've allocated the initial kernel data structures, we set
 	// up the list of free physical pages. Once we've done so, all further
@@ -208,7 +208,7 @@ i386_vm_init(void)
 	//    - the read-only version mapped at UPAGES -- kernel R, user R
 	// Your code goes here:
 	n = ROUNDUP(npage * sizeof(struct Page), PGSIZE);
-	boot_map_segment(pgdir, UPAGES, n, PADDR(pages), PTE_P | PTE_U);
+	boot_map_segment(pgdir, UPAGES, n, PADDR(pages), PTE_U | PTE_P);
 
 	//////////////////////////////////////////////////////////////////////
 	// Map the 'envs' array read-only by the user at linear address UENVS
@@ -216,7 +216,7 @@ i386_vm_init(void)
 	// Permissions:
 	//    - envs itself -- kernel RW, user NONE
 	//    - the image of envs mapped at UENVS  -- kernel R, user R
-
+	boot_map_segment(pgdir, UENVS, ROUNDUP(NENV * sizeof(struct Env),PGSIZE), PADDR(envs), PTE_U | PTE_P);
 
 	//////////////////////////////////////////////////////////////////////
 	// Map the kernel stack (symbol name "bootstack").  The complete VA
@@ -749,7 +749,28 @@ int
 user_mem_check(struct Env *env, const void *va, size_t len, int perm)
 {
 	// LAB 3: Your code here. 
-
+	int i;
+	unsigned int begin;
+	begin = (unsigned int)va / PGSIZE * PGSIZE + PGSIZE;
+	if(((unsigned int)*pgdir_walk(env->env_pgdir, va, 0) & (perm | PTE_P)) == (perm | PTE_P)){
+		for( ; begin < ((unsigned int)va + len) / PGSIZE * PGSIZE; begin += PGSIZE){
+			if(((unsigned int)*pgdir_walk(env->env_pgdir,(void *)begin, 0) & (perm | PTE_P)) == (perm | PTE_P)){
+				;
+			}
+			else{
+				user_mem_check_addr = begin;
+				cprintf("user_mem_check WRONG2!\n");
+				return -E_FAULT;
+			}
+		}	
+	}
+	else{
+		user_mem_check_addr = (unsigned int)va;
+		cprintf("%x\n",*pgdir_walk(env->env_pgdir,va,0));
+		cprintf("%x\n",PTE_P | PTE_U);
+		cprintf("user_mem_check WRONG1!!!\n");
+		return -E_FAULT;
+	}
 	return 0;
 }
 

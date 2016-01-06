@@ -9,6 +9,26 @@
 #include <kern/env.h>
 #include <kern/syscall.h>
 
+extern void divide_error();
+extern void debug();
+extern void nmi();
+extern void break_point();
+extern void overflow();
+extern void bounds();
+extern void invalid_op();
+extern void device_not_available();
+extern void double_fault();
+extern void invalid_TSS();
+extern void segment_not_present();
+extern void stack_segment();
+extern void general_protection();
+extern void page_fault();
+extern void float_point_error();
+extern void alignment_check();
+extern void machine_check();
+extern void SIMD_float_point_error();
+extern void system_call();
+
 static struct Taskstate ts;
 
 /* Interrupt descriptor table.  (Must be built at run time because
@@ -52,13 +72,35 @@ static const char *trapname(int trapno)
 	return "(unknown trap)";
 }
 
-
 void
 idt_init(void)
 {
 	extern struct Segdesc gdt[];
-	
+
 	// LAB 3: Your code here.
+	SETGATE(idt[T_DIVIDE], 0, GD_KT, divide_error, 0);
+	SETGATE(idt[T_DEBUG], 0, GD_KT, debug, 0);
+	SETGATE(idt[T_NMI], 0, GD_KT, nmi, 0);
+	SETGATE(idt[T_BRKPT], 0, GD_KT, break_point, 3);
+	SETGATE(idt[T_OFLOW], 0, GD_KT, overflow, 0);
+
+	SETGATE(idt[T_BOUND], 0, GD_KT, bounds, 0);
+	SETGATE(idt[T_ILLOP], 0, GD_KT, invalid_op, 0);
+	SETGATE(idt[T_DEVICE], 0, GD_KT, device_not_available, 0);
+	SETGATE(idt[T_DBLFLT], 0, GD_KT, double_fault, 0);
+
+	SETGATE(idt[T_TSS], 0, GD_KT, invalid_TSS, 0);
+	SETGATE(idt[T_SEGNP], 0, GD_KT, segment_not_present, 0);
+	SETGATE(idt[T_STACK], 0, GD_KT, stack_segment, 0);
+	SETGATE(idt[T_GPFLT], 0, GD_KT, general_protection, 0);
+	SETGATE(idt[T_PGFLT], 0, GD_KT, page_fault, 0);
+
+	SETGATE(idt[T_FPERR], 0, GD_KT, float_point_error, 0);
+	SETGATE(idt[T_ALIGN], 0, GD_KT, alignment_check, 0);
+	SETGATE(idt[T_MCHK], 0, GD_KT, machine_check, 0);
+	SETGATE(idt[T_SIMDERR], 0, GD_KT, SIMD_float_point_error, 0);
+
+	SETGATE(idt[T_SYSCALL], 0, GD_KT, system_call, 3);
 
 	// Setup a TSS so that we get the right stack
 	// when we trap to the kernel.
@@ -111,13 +153,29 @@ trap_dispatch(struct Trapframe *tf)
 {
 	// Handle processor exceptions.
 	// LAB 3: Your code here.
-	
+	switch(tf->tf_trapno){
+    	case T_SYSCALL:
+    		tf->tf_regs.reg_eax = syscall(tf->tf_regs.reg_eax,
+    			                          tf->tf_regs.reg_edx,
+    			                          tf->tf_regs.reg_ecx,
+    			                          tf->tf_regs.reg_ebx,
+    			                          tf->tf_regs.reg_edi,
+    			                          tf->tf_regs.reg_esi);
+    		return ;
+    	case T_PGFLT:
+    		page_fault_handler(tf);
+    		return ;
+    	case T_BRKPT:
+    		monitor(tf);
+    		return ;
+    }
 
 	// Unexpected trap: The user process or the kernel has a bug.
 	print_trapframe(tf);
 	if (tf->tf_cs == GD_KT)
 		panic("unhandled trap in kernel");
 	else {
+		cprintf("mapping interup finished!!\n");
 		env_destroy(curenv);
 		return;
 	}
