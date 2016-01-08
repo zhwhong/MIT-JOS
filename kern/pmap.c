@@ -195,8 +195,6 @@ i386_vm_init(void)
 
 	page_check();
 
-	//cprintf("---------->page_check\n");
-
 	//////////////////////////////////////////////////////////////////////
 	// Now we set up virtual memory 
 	
@@ -208,15 +206,15 @@ i386_vm_init(void)
 	//    - the read-only version mapped at UPAGES -- kernel R, user R
 	// Your code goes here:
 	n = ROUNDUP(npage * sizeof(struct Page), PGSIZE);
-	boot_map_segment(pgdir, UPAGES, n, PADDR(pages), PTE_U | PTE_P);
-
+	boot_map_segment(pgdir, UPAGES, n, PADDR(pages), PTE_P | PTE_U);
+	
 	//////////////////////////////////////////////////////////////////////
 	// Map the 'envs' array read-only by the user at linear address UENVS
 	// (ie. perm = PTE_U | PTE_P).
 	// Permissions:
 	//    - envs itself -- kernel RW, user NONE
 	//    - the image of envs mapped at UENVS  -- kernel R, user R
-	boot_map_segment(pgdir, UENVS, ROUNDUP(NENV * sizeof(struct Env),PGSIZE), PADDR(envs), PTE_U | PTE_P);
+	boot_map_segment(pgdir, UENVS, ROUNDUP( NENV * sizeof(struct Env), PGSIZE), PADDR(envs), PTE_U|PTE_P);
 
 	//////////////////////////////////////////////////////////////////////
 	// Map the kernel stack (symbol name "bootstack").  The complete VA
@@ -226,7 +224,7 @@ i386_vm_init(void)
 	//     * [KSTACKTOP-PTSIZE, KSTACKTOP-KSTKSIZE) -- not backed => faults
 	//     Permissions: kernel RW, user NONE
 	// Your code goes here:
-	boot_map_segment(pgdir, KSTACKTOP - KSTKSIZE, KSTKSIZE, PADDR(bootstack), PTE_W | PTE_P);
+	boot_map_segment(pgdir, KSTACKTOP - KSTKSIZE, KSTKSIZE, PADDR(bootstack), PTE_W|PTE_P);
 
 	//////////////////////////////////////////////////////////////////////
 	// Map all of physical memory at KERNBASE. 
@@ -236,7 +234,7 @@ i386_vm_init(void)
 	// we just set up the amapping anyway.
 	// Permissions: kernel RW, user NONE
 	// Your code goes here: 
-	boot_map_segment(pgdir, KERNBASE, 0xFFFFFFFF - KERNBASE + 1, 0, PTE_W | PTE_P);
+	boot_map_segment(pgdir, KERNBASE, 0xffffffff - KERNBASE + 1, 0, PTE_W|PTE_P);
 
 	// Check that the initial page directory has been set up correctly.
 	check_boot_pgdir();
@@ -348,7 +346,7 @@ check_page_alloc()
 	page_free(pp1);
 	page_free(pp2);
 
-	cprintf("check_page_alloc() succeeded!\n");
+	// cprintf("check_page_alloc() succeeded!\n");
 }
 
 //
@@ -405,7 +403,7 @@ check_boot_pgdir(void)
 			break;
 		}
 	}
-	cprintf("check_boot_pgdir() succeeded!\n");
+	// cprintf("check_boot_pgdir() succeeded!\n");
 }
 
 // This function returns the physical address of the page containing 'va',
@@ -455,14 +453,13 @@ page_init(void)
 	//     Which pages are used for page tables and other data structures?
 	//
 	// Change the code to reflect this.
-	
 	int i;
 	LIST_INIT(&page_free_list);
 	for (i = 0; i < npage; i++) {
 		pages[i].pp_ref = 0;
 		LIST_INSERT_HEAD(&page_free_list, &pages[i], pp_link);
 	}
-	
+
 	pages[0].pp_ref = 1;
 	LIST_REMOVE(&pages[0], pp_link);
 	for(i = IOPHYSMEM; i < EXTPHYSMEM; i += PGSIZE){
@@ -504,8 +501,7 @@ int
 page_alloc(struct Page **pp_store)
 {
 	// Fill this function in
-	//return -E_NO_MEM;
-	if(LIST_FIRST(&page_free_list) == NULL){
+	if( LIST_FIRST(&page_free_list) == NULL){
 		return -E_NO_MEM;
 	}
 	else{
@@ -561,7 +557,6 @@ pte_t *
 pgdir_walk(pde_t *pgdir, const void *va, int create)
 {
 	// Fill this function in
-	//return NULL;
 	pte_t *pt_addr_v;
 	struct Page *pg;
 	if((pgdir[PDX(va)] & PTE_P) != 0){
@@ -625,7 +620,6 @@ page_insert(pde_t *pgdir, struct Page *pp, void *va, int perm)
 		tlb_invalidate(pgdir, va);
 		return 0;
 	}
-	//return 0;
 }
 
 //
@@ -645,6 +639,8 @@ boot_map_segment(pde_t *pgdir, uintptr_t la, size_t size, physaddr_t pa, int per
 	unsigned int i;
 	pte_t *pg;
 	size = ROUNDUP(size, PGSIZE);
+	la = ROUNDDOWN(la, PGSIZE);
+	pa = ROUNDDOWN(pa, PGSIZE);
 	for(i = 0; i < size; i += PGSIZE){
 		pg = pgdir_walk(pgdir, (void *)(la + i), 1);
 		if(pg == NULL){
@@ -749,28 +745,60 @@ int
 user_mem_check(struct Env *env, const void *va, size_t len, int perm)
 {
 	// LAB 3: Your code here. 
+	uintptr_t lva = (uintptr_t)va;
+	uintptr_t rva = (uintptr_t)va + len - 1;
+	perm = perm | PTE_U | PTE_P;
+	pte_t *pte;
+	uintptr_t curva = lva;
+	while (curva <= rva){
+		if (curva >= ULIM){
+			cprintf("user_mem_check for loop mem range exceeded ULIM.\n");
+			user_mem_check_addr = curva;
+			return -E_FAULT;
+		}
+		pte = pgdir_walk(env->env_pgdir, (void *)curva, 0);
+		if (pte == NULL || (*pte & perm) != perm){
+			user_mem_check_addr = curva;
+			return -E_FAULT;
+		}
+		curva = ROUNDDOWN(curva, PGSIZE);
+		curva += PGSIZE;
+	}
+	/*
 	int i;
 	unsigned int begin;
 	begin = (unsigned int)va / PGSIZE * PGSIZE + PGSIZE;
-	if(((unsigned int)*pgdir_walk(env->env_pgdir, va, 0) & (perm | PTE_P)) == (perm | PTE_P)){
+	if( (pgdir_walk(env->env_pgdir, va, 0) != NULL) &&
+		((unsigned int)*pgdir_walk(env->env_pgdir, va, 0) & (perm | PTE_P)) == (perm | PTE_P))
+	{
 		for( ; begin < ((unsigned int)va + len) / PGSIZE * PGSIZE; begin += PGSIZE){
-			if(((unsigned int)*pgdir_walk(env->env_pgdir,(void *)begin, 0) & (perm | PTE_P)) == (perm | PTE_P)){
+			if(begin >= ULIM){
+				cprintf("user_mem_check: >= ULIM\n");
+				user_mem_check_addr = begin;
+			}
+			if( (pgdir_walk(env->env_pgdir, va, 0) != NULL) &&
+				((unsigned int)*pgdir_walk(env->env_pgdir,(void *)begin, 0) & (perm | PTE_P)) == (perm | PTE_P))
+			{
 				;
 			}
 			else{
 				user_mem_check_addr = begin;
-				cprintf("user_mem_check WRONG2!\n");
+				//cprintf("user_mem_check WRONG2!\n");
+				cprintf("user_mem_check -> begin : 0x%x\n", begin);
+				cprintf("user_mem_check: perm fial!!!\n");
 				return -E_FAULT;
 			}
 		}	
 	}
 	else{
 		user_mem_check_addr = (unsigned int)va;
-		cprintf("%x\n",*pgdir_walk(env->env_pgdir,va,0));
-		cprintf("%x\n",PTE_P | PTE_U);
-		cprintf("user_mem_check WRONG1!!!\n");
+		//cprintf("%x\n",*pgdir_walk(env->env_pgdir,va,0));
+		//cprintf("%x\n",PTE_P | PTE_U);
+		//cprintf("user_mem_check WRONG1!!!\n");
+		cprintf("user_mem_check: perm fial!!!\n");
 		return -E_FAULT;
 	}
+        */
 	return 0;
 }
 
@@ -943,6 +971,6 @@ page_check(void)
 	page_free(pp1);
 	page_free(pp2);
 	
-	cprintf("page_check() succeeded!\n");
+	// cprintf("page_check() succeeded!\n");
 }
 

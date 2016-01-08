@@ -19,6 +19,22 @@ sched_yield(void)
 	// unless NOTHING else is runnable.
 
 	// LAB 4: Your code here.
+	struct Env *curenvptr = curenv;
+
+	if (curenv == NULL)
+		curenvptr = envs;
+
+	int i = 0;
+
+	for (++curenvptr; i < NENV; ++i, ++curenvptr){
+		if (curenvptr >= envs + NENV){
+			curenvptr = envs + 1;
+		}
+		if (curenvptr->env_status == ENV_RUNNABLE){
+			// cprintf("next envid: %d\n", curenvptr->env_id & 0x3ff);
+			env_run(curenvptr);
+		}
+	}
 
 	// Run the special idle environment when nothing else is runnable.
 	if (envs[0].env_status == ENV_RUNNABLE)

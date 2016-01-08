@@ -142,9 +142,10 @@ debuginfo_eip(uintptr_t addr, struct Eipdebuginfo *info)
 		// Make sure this memory is valid.
 		// Return -1 if it is not.  Hint: Call user_mem_check.
 		// LAB 3: Your code here.
-		if(user_mem_check(curenv, usd, sizeof(struct UserStabData), PTE_U) < 0){
+		if (user_mem_check(curenv, usd, sizeof(struct UserStabData), PTE_U) < 0){
 			return -1;
 		}
+		
 		stabs = usd->stabs;
 		stab_end = usd->stab_end;
 		stabstr = usd->stabstr;
@@ -152,8 +153,9 @@ debuginfo_eip(uintptr_t addr, struct Eipdebuginfo *info)
 
 		// Make sure the STABS and string table memory is valid.
 		// LAB 3: Your code here.
-		if(user_mem_check(curenv, stabs, stab_end - stabs, PTE_U) < 0 ||
-		   user_mem_check(curenv, stabstr, stabstr_end - stabstr, PTE_U) < 0){
+
+		if (user_mem_check(curenv, stabs, stab_end - stabs, PTE_U) < 0 ||
+			user_mem_check(curenv, stabstr, stabstr_end - stabstr, PTE_U) < 0){
 			return -1;
 		}
 	}
@@ -235,17 +237,10 @@ debuginfo_eip(uintptr_t addr, struct Eipdebuginfo *info)
 	// Set eip_fn_narg to the number of arguments taken by the function,
 	// or 0 if there was no containing function.
 	// Your code here.
-	/*
-	if (lfun < rfun) {
-        for (lline = lfun + 1;
-             lline < rfun && stabs[lline].n_type == N_PSYM;
-             lline ++) {
-            info->eip_fn_narg ++;
-        }
-    }
-    */
-    for( ; lfun < rfun; lfun++){
+    for( ; lfun <= rfun; lfun++){
     	if(stabs[lfun].n_type == N_PSYM){
+		info->eip_fn_arg_string[info->eip_fn_narg] = stabstr + stabs[lfun].n_strx;
+		info->eip_fn_arg_length[info->eip_fn_narg] = strfind(stabstr + stabs[lfun].n_strx, ':') - (stabstr + stabs[lfun].n_strx);
     		info->eip_fn_narg++; 
     	}
     }

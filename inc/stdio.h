@@ -22,10 +22,6 @@ int	vsnprintf(char *str, int size, const char *fmt, va_list);
 int	cprintf(const char *fmt, ...);
 int	vcprintf(const char *fmt, va_list);
 
-// lib/sprintf.c
-int	snprintf(char *str, int size, const char *fmt, ...);
-int	vsnprintf(char *str, int size, const char *fmt, va_list);
-
 // lib/fprintf.c
 int	printf(const char *fmt, ...);
 int	fprintf(int fd, const char *fmt, ...);

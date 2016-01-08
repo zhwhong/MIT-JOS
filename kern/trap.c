@@ -30,6 +30,7 @@ extern void float_point_error();
 extern void alignment_check();
 extern void machine_check();
 extern void SIMD_float_point_error();
+extern void timer();
 extern void system_call();
 
 static struct Taskstate ts;
@@ -104,6 +105,7 @@ idt_init(void)
 	SETGATE(idt[T_ALIGN], 0, GD_KT, alignment_check, 0);
 	SETGATE(idt[T_MCHK], 0, GD_KT, machine_check, 0);
 	SETGATE(idt[T_SIMDERR], 0, GD_KT, SIMD_float_point_error, 0);
+	SETGATE(idt[IRQ_OFFSET + IRQ_TIMER], 0, GD_KT, timer, 0);
 
 	SETGATE(idt[T_SYSCALL], 0, GD_KT, system_call, 3);
 
@@ -158,32 +160,32 @@ trap_dispatch(struct Trapframe *tf)
 {
 	// Handle processor exceptions.
 	// LAB 3: Your code here.
-	switch(tf->tf_trapno){
-    	case T_SYSCALL:
-    		tf->tf_regs.reg_eax = syscall(tf->tf_regs.reg_eax,
-    			                          tf->tf_regs.reg_edx,
-    			                          tf->tf_regs.reg_ecx,
-    			                          tf->tf_regs.reg_ebx,
-    			                          tf->tf_regs.reg_edi,
-    			                          tf->tf_regs.reg_esi);
-    		return ;
-    	case T_PGFLT:
-    		page_fault_handler(tf);
-    		return ;
-    	case T_BRKPT:
-    		monitor(tf);
-    		return ;
-    }
-
 	// Handle clock and serial interrupts.
 	// LAB 4: Your code here.
-
+	switch(tf->tf_trapno){
+			case T_SYSCALL:
+				tf->tf_regs.reg_eax = syscall(tf->tf_regs.reg_eax,
+					                          tf->tf_regs.reg_edx,
+					                          tf->tf_regs.reg_ecx,
+					                          tf->tf_regs.reg_ebx,
+					                          tf->tf_regs.reg_edi,
+					                          tf->tf_regs.reg_esi);
+				return ;
+			case T_PGFLT:
+				page_fault_handler(tf);
+				return ;
+			case T_BRKPT:
+				monitor(tf);
+				return ;
+			case IRQ_OFFSET + IRQ_TIMER:
+				sched_yield();
+				return ;
+    }
 	// Unexpected trap: The user process or the kernel has a bug.
 	print_trapframe(tf);
 	if (tf->tf_cs == GD_KT)
 		panic("unhandled trap in kernel");
 	else {
-		cprintf("mapping interup finished!!\n");
 		env_destroy(curenv);
 		return;
 	}
@@ -192,7 +194,10 @@ trap_dispatch(struct Trapframe *tf)
 void
 trap(struct Trapframe *tf)
 {
-	cprintf("Incoming TRAP frame at %p\n", tf);
+	asm volatile("cld" : : : "cc");
+	assert(!(read_eflags() & FL_IF));
+
+	// cprintf("Incoming TRAP frame at %p\n", tf);
 
 	if ((tf->tf_cs & 3) == 3) {
 		// Trapped from user mode.
@@ -229,6 +234,9 @@ page_fault_handler(struct Trapframe *tf)
 	// Handle kernel-mode page faults.
 	
 	// LAB 3: Your code here.
+	if ((tf->tf_cs & 3) == 0) {
+		panic("kernel-mode page fault!\n");
+	}
 
 	// We've already handled kernel-mode exceptions, so if we get here,
 	// the page fault happened in user mode.
@@ -259,6 +267,27 @@ page_fault_handler(struct Trapframe *tf)
 	//   (the 'tf' variable points at 'curenv->env_tf').
 	
 	// LAB 4: Your code here.
+	if (curenv->env_pgfault_upcall != NULL){
+		struct UTrapframe *utf;
+		if (UXSTACKTOP - PGSIZE <= tf->tf_esp && tf->tf_esp < UXSTACKTOP){
+			utf = (struct UTrapframe *)(tf->tf_esp - sizeof(struct UTrapframe) - 4);
+		} else {
+			utf = (struct UTrapframe *)(UXSTACKTOP - sizeof(struct UTrapframe));
+		}
+
+		user_mem_assert(curenv, (void *)utf, sizeof(struct UTrapframe), PTE_U | PTE_W);
+
+		utf->utf_eflags = tf->tf_eflags;
+		utf->utf_eip = tf->tf_eip;
+		utf->utf_err = tf->tf_err;
+		utf->utf_esp = tf->tf_esp;
+		utf->utf_fault_va = fault_va;
+		utf->utf_regs = tf->tf_regs;
+
+		curenv->env_tf.tf_eip = (uint32_t)curenv->env_pgfault_upcall;
+		curenv->env_tf.tf_esp = (uint32_t)utf;
+		env_run(curenv);
+	}
 
 	// Destroy the environment that caused the fault.
 	cprintf("[%08x] user fault va %08x ip %08x\n",

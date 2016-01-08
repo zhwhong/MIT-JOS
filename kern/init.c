@@ -44,13 +44,23 @@ i386_init(void)
 
 	// Should always have an idle process as first one.
 	ENV_CREATE(user_idle);
+	// ENV_CREATE(user_yield);
+	// ENV_CREATE(user_yield);
+	// ENV_CREATE(user_yield);
 
 #if defined(TEST)
 	// Don't touch -- used by grading script!
-	ENV_CREATE2(TEST, TESTSIZE);
+	ENV_CREATE2(TEST, TESTSIZE)
 #else
 	// Touch all you want.
-	ENV_CREATE(user_primes);
+	ENV_CREATE(user_pingpong);
+	//ENV_CREATE(user_primes);
+	//ENV_CREATE(user_forktree);
+	//ENV_CREATE(user_faultalloc);
+	//ENV_CREATE(user_faultdie);
+	//ENV_CREATE(user_dumbfork);
+	//ENV_CREATE(user_yield);
+	//ENV_CREATE(user_yield);
 #endif // TEST*
 
 
@@ -58,9 +68,6 @@ i386_init(void)
 	sched_yield();
 
 
-	// Drop into the kernel monitor.
-	//while (1)
-	//	monitor(NULL);
 }
 
 

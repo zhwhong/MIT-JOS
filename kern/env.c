@@ -73,7 +73,6 @@ void
 env_init(void)
 {
 	// LAB 3: Your code here.
-	//struct Env *env;
 	int i;
 	LIST_INIT(&env_free_list);
 	for(i = NENV - 1; i >= 0; i--){
@@ -131,7 +130,7 @@ env_setup_vm(struct Env *e)
 	// different permissions.
 	e->env_pgdir[PDX(VPT)]  = e->env_cr3 | PTE_P | PTE_W;
 	e->env_pgdir[PDX(UVPT)] = e->env_cr3 | PTE_P | PTE_U;
-	cprintf("env_setup_vm end!!\n");
+	//cprintf("env_setup_vm end!!\n");
 
 	return 0;
 }
@@ -189,7 +188,7 @@ env_alloc(struct Env **newenv_store, envid_t parent_id)
 
 	// Enable interrupts while in user mode.
 	// LAB 4: Your code here.
-
+	e->env_tf.tf_eflags |= FL_IF;
 	// Clear the page fault handler until user installs one.
 	e->env_pgfault_upcall = 0;
 
@@ -294,52 +293,43 @@ load_icode(struct Env *e, uint8_t *binary, size_t size)
 	struct Elf *env_elf = (struct Elf *)binary;
 	struct Proghdr *ph, *eph;
 	struct Page *pg;
-	unsigned int old_cr3 = rcr3();
+	uint32_t old_cr3;
+
+	// store the current cr3 and 
+	// switch cr3 to the pgdir of the env
+	old_cr3 = rcr3();
 	lcr3(PADDR(e->env_pgdir));
 	if(env_elf->e_magic != ELF_MAGIC){
 		panic("elf header's magic is not correct\n");
-		return ;
 	}
 	ph = (struct Proghdr *)((uint8_t *)env_elf + env_elf->e_phoff);
 	eph = ph + env_elf->e_phnum;
-	/*
-	for(i = 0; i < env_elf->e_phnum; i++){
-		if(ph->p_type == ELF_PROG_LOAD){
-			segment_alloc(e, (void *)ph->p_va, ph->p_memsz);
-			memset((void *)ph->p_va, 0, ph->p_memsz - ph->p_filesz);
-			cprintf("segment_alloc success!!!\n");
-			memmove((void *)ph->p_va, (void *)((unsigned int)env_elf + ph->p_offset), ph->p_filesz);
-		}
-		ph++;
-	}
-	*/
+	
 	for( ; ph < eph; ph++){
 		if(ph->p_type == ELF_PROG_LOAD){
 			segment_alloc(e, (void *)ph->p_va, ph->p_memsz);
-			memmove((void *)ph->p_va, (binary + ph->p_offset), ph->p_filesz);
-			memset((void *)(ph->p_va + ph->p_filesz), 0, ph->p_memsz - ph->p_filesz);
-			cprintf("segment_alloc success!!!\n");
+			// cprintf("load_icode segment_alloc succeeded!\n");
+			memset((void *)ph->p_va, 0, ph->p_memsz);
+			memmove((void*)ph->p_va, (void *)((uint32_t) env_elf + ph->p_offset), ph->p_filesz);
 		}
 	}
-	
+	// cprintf("load_icode while loop succeeded!\n");
 	e->env_tf.tf_eip = env_elf->e_entry;
-	cprintf("env_elf %x\n",env_elf->e_entry);
+	// cprintf("load_icode program entry point: %x\n", elf->e_entry);
 
 	// Now map one page for the program's initial stack
 	// at virtual address USTACKTOP - PGSIZE.
 
 	// LAB 3: Your code here.
-	lcr3(old_cr3);
-
 	if(page_alloc(&pg) != 0){
-		cprintf("load_icode page_alloc fail!!!\n");
-		return ;
+		panic("load_icode page_alloc fail!!!\n");
 	}
 	if(page_insert(e->env_pgdir, pg, (void *)(USTACKTOP - PGSIZE), PTE_U|PTE_W) != 0){
-		cprintf("load_icode page_insert fail!!!\n");
-		return ;
+		panic("load_icode page_insert fail!!!\n");
 	}
-	cprintf("load_icode success!\n");
+
+	lcr3(old_cr3);
+	//cprintf("load_icode success!\n");
 }
 
 //
@@ -357,14 +347,13 @@ env_create(uint8_t *binary, size_t size)
 {
 	// LAB 3: Your code here.
 	struct Env *env;
-	cprintf("env_create start!\n");
+	//cprintf("env_create start!\n");
 	if(env_alloc(&env, 0) != 0){
-		cprintf("env_create env_alloc fail!!\n");
-		return ;
+		panic("env_create env_alloc fail!!\n");
 	}
-	cprintf("env_alloc success!!\n");
+	//cprintf("env_alloc success!!\n");
 	load_icode(env, binary, size);
-	cprintf("env_create end\n");
+	//cprintf("env_create end\n");
 	return ;
 }
 
@@ -478,11 +467,13 @@ env_run(struct Env *e)
 	//	e->env_tf to sensible values.
 	
 	// LAB 3: Your code here.
-	curenv = e;
-	curenv -> env_runs++;
-	lcr3(curenv->env_cr3);
-	cprintf("run the user programme!!\n");
+	if(curenv != e){
+		curenv = e;
+		curenv -> env_runs++;
+		lcr3(curenv->env_cr3);
+	}
+	//cprintf("run the user programme!!\n");
 	env_pop_tf(&(curenv -> env_tf));
-    //panic("env_run not yet implemented");
+        //panic("env_run not yet implemented");
 }
 

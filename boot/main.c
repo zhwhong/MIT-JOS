@@ -66,7 +66,7 @@ bad:
 
 // Read 'count' bytes at 'offset' from kernel into virtual address 'va'.
 // Might copy more than asked
-static void
+void
 readseg(uint32_t va, uint32_t count, uint32_t offset)
 {
 	uint32_t end_va;
@@ -98,7 +98,7 @@ waitdisk(void)
 		/* do nothing */;
 }
 
-static void
+void
 readsect(void *dst, uint32_t offset)
 {
 	// wait for disk to be ready

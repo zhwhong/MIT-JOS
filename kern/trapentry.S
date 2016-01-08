@@ -62,6 +62,7 @@
  	TRAPHANDLER_NOEC(system_call, T_SYSCALL)
  	TRAPHANDLER_NOEC(machine_check, T_MCHK)
  	TRAPHANDLER_NOEC(SIMD_float_point_error, T_SIMDERR)
+ 	TRAPHANDLER_NOEC(timer, IRQ_OFFSET + IRQ_TIMER)
 
 /*
  * Lab 3: Your code here for _alltraps
@@ -70,9 +71,9 @@ _alltraps:
 	pushl %ds
 	pushl %es
 	pushal
-	movl $GD_KD,%eax
-	movw %ax,%ds
-	movw %ax,%es
+	movl $GD_KD, %eax
+	movw %ax, %ds
+	movw %ax, %es
 	pushl %esp
 	call trap
 	popl %esp
